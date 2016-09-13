@@ -1,14 +1,9 @@
 ﻿using NBitcoin;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using static NBitcoin.Transaction;
 
 namespace Stratis.Bitcoin.FullNode.Consensus
 {
-	public class ConsensusFlags
+    public class ConsensusFlags
 	{
 		public ConsensusFlags()
 		{

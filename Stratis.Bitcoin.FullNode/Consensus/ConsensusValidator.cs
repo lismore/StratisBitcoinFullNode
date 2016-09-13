@@ -4,8 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using static NBitcoin.Transaction;
 
 namespace Stratis.Bitcoin.FullNode.Consensus
@@ -32,27 +30,27 @@ namespace Stratis.Bitcoin.FullNode.Consensus
 
 		public bool ContextualCheckBlock(Block block, ConsensusFlags consensusFlags, ContextInformation context)
 		{
-			int nHeight = context.BestBlock == null ? 0 : context.BestBlock.Height + 1;
+			var nHeight = context.BestBlock == null ? 0 : context.BestBlock.Height + 1;
 
 			// Start enforcing BIP113 (Median Time Past) using versionbits logic.
-			var nLockTimeCutoff = consensusFlags.LockTimeFlags.HasFlag(LockTimeFlags.MedianTimePast) ?
-				context.BestBlock.MedianTimePast :
-				block.Header.BlockTime;
+		    if (context.BestBlock != null)
+		    {
+		        var nLockTimeCutoff = consensusFlags.LockTimeFlags.HasFlag(LockTimeFlags.MedianTimePast) ?
+		            context.BestBlock.MedianTimePast :
+		            block.Header.BlockTime;
 
-			// Check that all transactions are finalized
-			foreach(var transaction in block.Transactions)
-			{
-				if(!transaction.IsFinal(nLockTimeCutoff, nHeight))
-				{
-					return Error("bad-txns-nonfinal", "non-final transaction");
-				}
-			}
+		        // Check that all transactions are finalized
+		        if (block.Transactions.Any(transaction => !transaction.IsFinal(nLockTimeCutoff, nHeight)))
+		        {
+		            return Error("bad-txns-nonfinal", "non-final transaction");
+		        }
+		    }
 
-			// Enforce rule that the coinbase starts with serialized block height
+		    // Enforce rule that the coinbase starts with serialized block height
 			if(consensusFlags.EnforceBIP34)
 			{
-				Script expect = new Script(Op.GetPushOp(nHeight));
-				Script actual = block.Transactions[0].Inputs[0].ScriptSig;
+				var expect = new Script(Op.GetPushOp(nHeight));
+				var actual = block.Transactions[0].Inputs[0].ScriptSig;
 				if(!StartWith(actual.ToBytes(true), expect.ToBytes(true)))
 				{
 					return Error("bad-cb-height", "block height mismatch in coinbase");
@@ -67,13 +65,13 @@ namespace Stratis.Bitcoin.FullNode.Consensus
 			// * There must be at least one output whose scriptPubKey is a single 36-byte push, the first 4 bytes of which are
 			//   {0xaa, 0x21, 0xa9, 0xed}, and the following 32 bytes are SHA256^2(witness root, witness nonce). In case there are
 			//   multiple, the last one is used.
-			bool fHaveWitness = false;
+			var fHaveWitness = false;
 			if(consensusFlags.ScriptFlags.HasFlag(ScriptVerify.Witness))
 			{
-				int commitpos = GetWitnessCommitmentIndex(block);
+				var commitpos = GetWitnessCommitmentIndex(block);
 				if(commitpos != -1)
 				{
-					bool malleated = false;
+					var malleated = false;
 					uint256 hashWitness = BlockWitnessMerkleRoot(block, ref malleated);
 					// The malleation check is ignored; as the transaction tree itself
 					// already does not permit it, it is impossible to trigger in the
@@ -84,7 +82,7 @@ namespace Stratis.Bitcoin.FullNode.Consensus
 						return Error("bad-witness-nonce-size", "invalid witness nonce size");
 					}
 
-					byte[] hashed = new byte[64];
+					var hashed = new byte[64];
 					Buffer.BlockCopy(hashWitness.ToBytes(), 0, hashed, 0, 32);
 					Buffer.BlockCopy(witness.Pushes.First(), 0, hashed, 32, 32);
 					hashWitness = Hashes.Hash256(hashed);
@@ -125,18 +123,15 @@ namespace Stratis.Bitcoin.FullNode.Consensus
 			block.ReadWrite(bms);
 			var withWitnessSize = ms.Position;
 			ms = new MemoryStream(buffer);
-			bms = new BitcoinStream(ms, true);
-			bms.TransactionOptions = TransactionOptions.None;
-			block.ReadWrite(bms);
+		    bms = new BitcoinStream(ms, true) {TransactionOptions = TransactionOptions.None};
+		    block.ReadWrite(bms);
 			var noWitnessSize = ms.Position;
 			return noWitnessSize * (WITNESS_SCALE_FACTOR - 1) + withWitnessSize;
 		}
 
-
-
 		private bool EqualsArray(byte[] a, byte[] b, int len)
 		{
-			for(int i = 0; i < len; i++)
+			for(var i = 0; i < len; i++)
 			{
 				if(a[i] != b[i])
 					return false;
@@ -146,13 +141,10 @@ namespace Stratis.Bitcoin.FullNode.Consensus
 
 		private uint256 BlockWitnessMerkleRoot(Block block, ref bool mutated)
 		{
-			List<uint256> leaves = new List<uint256>();
-			leaves.Add(uint256.Zero); // The witness hash of the coinbase is 0.
-			foreach(var tx in block.Transactions.Skip(1))
-			{
-				leaves.Add(tx.GetWitHash());
-			}
-			return ComputeMerkleRoot(leaves, ref mutated);
+		    var leaves = new List<uint256> {uint256.Zero};
+		    // The witness hash of the coinbase is 0.
+		    leaves.AddRange(block.Transactions.Skip(1).Select(tx => tx.GetWitHash()));
+		    return ComputeMerkleRoot(leaves, ref mutated);
 		}
 
 		private uint256 ComputeMerkleRoot(List<uint256> leaves, ref bool mutated)
@@ -172,7 +164,7 @@ namespace Stratis.Bitcoin.FullNode.Consensus
 				root = uint256.Zero;
 				return;
 			}
-			bool mutated = false;
+			var mutated = false;
 			// count is the number of leaves processed so far.
 			uint count = 0;
 			// inner is an array of eagerly computed subtree hashes, indexed by tree
@@ -184,12 +176,12 @@ namespace Stratis.Bitcoin.FullNode.Consensus
 			for(int i = 0; i < inner.Length; i++)
 				inner[i] = uint256.Zero;
 			// Which position in inner is a hash that depends on the matching leaf.
-			int matchlevel = -1;
+			var matchlevel = -1;
 			// First process all leaves into 'inner' values.
 			while(count < leaves.Count)
 			{
 				uint256 h = leaves[(int)count];
-				bool matchh = count == branchpos;
+				var matchh = count == branchpos;
 				count++;
 				int level;
 				// For each of the lower bits in count that are 0, do 1 step. Each
@@ -316,7 +308,7 @@ namespace Stratis.Bitcoin.FullNode.Consensus
 		{
 			if(context.BestBlock == null)
 				throw new ArgumentException("context.BestBlock should not be null");
-			int nHeight = context.BestBlock.Height + 1;
+			var nHeight = context.BestBlock.Height + 1;
 
 			// Check proof of work
 			if(header.Bits != context.NextWorkRequired)
